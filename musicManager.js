@@ -9,6 +9,7 @@ const {
 } = require('@discordjs/voice');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const play = require('play-dl');
+const ytdl = require('@distube/ytdl-core'); // ← play-dl の代わりにこちらを使用
 const { getSettings, addHistory } = require('./database');
 
 // ジャンルごとの検索キーワード
@@ -164,7 +165,7 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   // デバッグ用ログ
   console.log(`[playTrackFromUrl] 渡されたトラック:`, track);
 
-  // ▼ 強力なURLチェック（ここで無効なデータを完全に弾く） ▼
+  // 無効なURLのガード
   if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
     console.error(`[再生スキップ] 無効なURLが検出されたため再生を中止しました:`, track);
     m.current = null;
@@ -172,12 +173,16 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
     return;
   }
 
-  // stream の宣言は1回のみにする
-const stream = await play.stream(track.url, { discordPlayerCompatibility: true });
-  const resource = createAudioResource(stream.stream, {
-    inputType: stream.type,
+  // ytdl-core を使って音声ストリームとリソースを生成
+  const stream = ytdl(track.url, {
+    filter: 'audioonly',
+    highWaterMark: 1 << 25,
+  });
+
+  const resource = createAudioResource(stream, {
     inlineVolume: true,
   });
+
   const vol = Math.max(0, Math.min(100, volumePercent));
   resource.volume.setVolume(vol / 100);
   m.resource = resource;
