@@ -201,38 +201,43 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // ▼▼▼ 環境変数のCookieを yt-dlp 用の Netscape 形式に変換して書き出す ▼▼▼
+    // 環境変数のCookieを yt-dlp 用の Netscape 形式に正しく変換して書き出す
     const cookiePath = path.join(__dirname, 'cookies.txt');
     const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
     
     if (cookieValue) {
-      let netscapeLines = ['# Netscape HTTP Cookie File'];
+      const netscapeLines = [
+        '# Netscape HTTP Cookie File',
+        '# https://curl.haxx.se/docs/http_cookies.html',
+        ''
+      ];
       const cookies = cookieValue.split(';');
       for (const c of cookies) {
-        const parts = c.trim().split('=');
-        if (parts.length >= 2) {
-          const name = parts[0].trim();
-          const value = parts.slice(1).join('=').trim();
-          if (name && value) {
-            netscapeLines.push(`.youtube.com\tTRUE\t/\tTRUE\t2147483647\t${name}\t${value}`);
-          }
+        const trimmed = c.trim();
+        if (!trimmed) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) continue;
+        const name = trimmed.substring(0, eqIdx).trim();
+        const value = trimmed.substring(eqIdx + 1).trim();
+        if (name && value) {
+          netscapeLines.push(`.youtube.com\tTRUE\t/\tTRUE\t2147483647\t${name}\t${value}`);
         }
       }
       fs.writeFileSync(cookiePath, netscapeLines.join('\n'));
     }
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-// yt-dlp (youtube-dl-exec) に cookies オプションを渡して直リンクを取得
+    // yt-dlp でボット検知を回避しつつ、Androidクライアントとして音声直リンクを取得
     const streamUrl = String(
       await youtubedl(track.url, {
         getUrl: true,
-        f: 'bestaudio/best', // ← 'bestaudio' から 'bestaudio/best' に変更
+        f: 'bestaudio/best',
         noWarnings: true,
         noPlaylist: true,
         cookies: fs.existsSync(cookiePath) ? cookiePath : undefined,
+        extractorArgs: 'youtube:player-client=android', // YouTubeのフォーマット制限を回避
       })
     ).trim();
-    
+
     if (!streamUrl) {
       throw new Error('音声の直リンクの取得に失敗しました');
     }
