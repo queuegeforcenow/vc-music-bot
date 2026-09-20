@@ -12,6 +12,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const { spawn } = require('child_process'); // ← 追加
 const ffmpeg = require('ffmpeg-static'); // ← 追加
 const play = require('play-dl');
+const youtubedl = require('youtube-dl-exec'); // ← 追加
 const ytdl = require('@distube/ytdl-core');
 const { getSettings, addHistory } = require('./database');
 
@@ -198,41 +199,30 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // 確実にCookieエージェントを作成してボット検知を回避
-    let agent = undefined;
-    const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
-    if (cookieValue) {
-      try {
-        const cookies = parseCookies(cookieValue);
-        if (cookies.length > 0) {
-          agent = ytdl.createAgent(cookies);
-          console.log('[ytdl] Cookieエージェントの作成に成功しました');
-        }
-      } catch (err) {
-        console.error('[ytdl] Cookieエージェントの作成に失敗しました:', err);
-      }
+    // yt-dlp (youtube-dl-exec) を使ってYouTubeの音声直リンクを高確率で取得
+    const streamUrl = String(
+      await youtubedl(track.url, {
+        getUrl: true,
+        f: 'bestaudio',
+        noWarnings: true,
+        noPlaylist: true,
+      })
+    ).trim();
+
+    if (!streamUrl) {
+      throw new Error('音声の直リンクの取得に失敗しました');
     }
 
-    // ytdl-core に agent と playerClients を渡してストリームを取得
-    const ytdlStream = ytdl(track.url, {
-      filter: 'audioonly',
-      highWaterMark: 1 << 25,
-      agent: agent,
-      playerClients: ['WEB', 'ANDROID', 'IOS'],
-    });
-
-    // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
+    // ffmpeg-static を使って取得したURLの音声を Discord 用の PCM ストリームに変換する
     const transcoder = spawn(ffmpeg, [
-      '-i', 'pipe:0',
+      '-i', streamUrl,
       '-analyzeduration', '0',
       '-loglevel', '0',
       '-f', 's16le',
       '-ar', '48000',
       '-ac', '2',
       'pipe:1',
-    ], { stdio: ['pipe', 'pipe', 'ignore'] });
-
-    ytdlStream.pipe(transcoder.stdin);
+    ], { stdio: ['ignore', 'pipe', 'ignore'] });
 
     const resource = createAudioResource(transcoder.stdout, {
       inputType: StreamType.Raw,
