@@ -158,6 +158,15 @@ function getCurrentAndQueueSnapshot(guildId) {
 // 実際に音声リソースを作って再生する
 async function playTrackFromUrl(guildId, track, volumePercent) {
   const m = ensureManager(guildId);
+
+  // URLが存在しない（undefined）場合は処理を安全に中断
+  if (!track || !track.url) {
+    console.error(`[再生エラー] guild=${guildId}: 再生対象のURLが指定されていません。`);
+    m.current = null;
+    await sendOrUpdateNowPlaying(guildId);
+    return;
+  }
+
   const stream = await play.stream(track.url);
   const resource = createAudioResource(stream.stream, {
     inputType: stream.type,
