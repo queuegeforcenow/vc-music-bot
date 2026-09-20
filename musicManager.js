@@ -6,14 +6,16 @@ const {
   AudioPlayerStatus,
   VoiceConnectionStatus,
   NoSubscriberBehavior,
-  StreamType, // ← 追加
+  StreamType,
 } = require('@discordjs/voice');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { spawn } = require('child_process'); // ← 追加
-const ffmpeg = require('ffmpeg-static'); // ← 追加
+const { spawn } = require('child_process');
+const ffmpeg = require('ffmpeg-static');
+const fs = require('fs'); // ← 追加
+const path = require('path'); // ← 追加
 const play = require('play-dl');
-const youtubedl = require('youtube-dl-exec'); // ← 追加
 const ytdl = require('@distube/ytdl-core');
+const youtubedl = require('youtube-dl-exec');
 const { getSettings, addHistory } = require('./database');
 
 // ジャンルごとの検索キーワード
@@ -199,13 +201,21 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // yt-dlp (youtube-dl-exec) を使ってYouTubeの音声直リンクを高確率で取得
+    // 環境変数のCookieを一時ファイルに書き出す
+    const cookiePath = path.join(__dirname, 'cookies.txt');
+    const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
+    if (cookieValue) {
+      fs.writeFileSync(cookiePath, cookieValue);
+    }
+
+    // yt-dlp (youtube-dl-exec) に cookies オプションを渡して直リンクを取得
     const streamUrl = String(
       await youtubedl(track.url, {
         getUrl: true,
         f: 'bestaudio',
         noWarnings: true,
         noPlaylist: true,
+        cookies: fs.existsSync(cookiePath) ? cookiePath : undefined,
       })
     ).trim();
 
