@@ -54,7 +54,6 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
-JavaScript
     let title, url;
     if (validType === 'video') {
       const info = await play.video_basic_info(link);
@@ -66,12 +65,10 @@ JavaScript
         return interaction.editReply('❌ 曲が見つかりませんでした。');
       }
       
-      // ▼▼▼ ここを安全に取得する形に変更 ▼▼▼
       const target = results[0];
       title = target.title;
-      // play-dl のバージョン違いによるURLプロパティ名の違いをカバー
-      url = target.url || target.id ? `https://www.youtube.com/watch?v=${target.id}` : null;
-      // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+      // URLが直接ない場合はidから生成、または target.url を使用
+      url = target.url || (target.id ? `https://www.youtube.com/watch?v=${target.id}` : null);
     }
 
     // デバッグ用ログ＆URLの空チェック
@@ -81,7 +78,6 @@ JavaScript
     }
 
     await enqueue(interaction.guildId, { title, url, requestedBy: interaction.user.tag });
-
 
     const m = getManager(interaction.guildId);
     const isNowPlaying = m.current && m.current.url === url && m.current.isAutoplay !== true;
