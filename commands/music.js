@@ -21,7 +21,14 @@ module.exports = {
 
     await interaction.deferReply();
 
-    const query = interaction.options.getString('query', true);
+    const query = interaction.options.getString('query');
+
+if (!query) {
+  return interaction.reply({
+    content: '❌ 曲名またはYouTubeのURLを指定してください。',
+    ephemeral: true,
+  });
+}
     const validType = play.yt_validate(query);
 
     await joinChannel(voiceChannel, interaction.channel);
