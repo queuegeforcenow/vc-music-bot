@@ -6,10 +6,13 @@ const {
   AudioPlayerStatus,
   VoiceConnectionStatus,
   NoSubscriberBehavior,
+  StreamType, // ← 追加
 } = require('@discordjs/voice');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { spawn } = require('child_process'); // ← 追加
+const ffmpeg = require('ffmpeg-static'); // ← 追加
 const play = require('play-dl');
-const ytdl = require('@distube/ytdl-core'); // ← play-dl の代わりにこちらを使用
+const ytdl = require('@distube/ytdl-core');
 const { getSettings, addHistory } = require('./database');
 
 // ジャンルごとの検索キーワード
@@ -173,30 +176,51 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
     return;
   }
 
-  // ytdl-core を使って音声ストリームとリソースを生成
-  const stream = ytdl(track.url, {
-    filter: 'audioonly',
-    highWaterMark: 1 << 25,
-  });
+  try {
+    // ytdl-core で音声ストリームを取得
+    const ytdlStream = ytdl(track.url, {
+      filter: 'audioonly',
+      highWaterMark: 1 << 25,
+    });
 
-  const resource = createAudioResource(stream, {
-    inlineVolume: true,
-  });
+    // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
+    const transcoder = spawn(ffmpeg, [
+      '-i', 'pipe:0',
+      '-analyzeduration', '0',
+      '-loglevel', '0',
+      '-f', 's16le',
+      '-ar', '48000',
+      '-ac', '2',
+      'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'ignore'] });
 
-  const vol = Math.max(0, Math.min(100, volumePercent));
-  resource.volume.setVolume(vol / 100);
-  m.resource = resource;
-  m.liveVolume = vol;
-  m.current = track;
-  m.player.play(resource);
-  await sendOrUpdateNowPlaying(guildId);
+    ytdlStream.pipe(transcoder.stdin);
 
-  addHistory(guildId, {
-    title: track.title,
-    url: track.url,
-    requestedBy: track.requestedBy ?? null,
-    isAutoplay: !!track.isAutoplay,
-  }).catch((err) => console.error('[履歴記録エラー]', err));
+    const resource = createAudioResource(transcoder.stdout, {
+      inputType: StreamType.Raw,
+      inlineVolume: true,
+    });
+
+    const vol = Math.max(0, Math.min(100, volumePercent));
+    resource.volume.setVolume(vol / 100);
+    m.resource = resource;
+    m.liveVolume = vol;
+    m.current = track;
+    m.player.play(resource);
+    await sendOrUpdateNowPlaying(guildId);
+
+    addHistory(guildId, {
+      title: track.title,
+      url: track.url,
+      requestedBy: track.requestedBy ?? null,
+      isAutoplay: !!track.isAutoplay,
+    }).catch((err) => console.error('[履歴記録エラー]', err));
+
+  } catch (err) {
+    console.error('[再生エラー]', err);
+    m.current = null;
+    await sendOrUpdateNowPlaying(guildId);
+  }
 }
 
 // キューの次の曲を再生
