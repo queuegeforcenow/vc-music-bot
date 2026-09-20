@@ -19,21 +19,20 @@ module.exports = {
       });
     }
 
+    const query = interaction.options.getString('query');
+    if (!query) {
+      return interaction.reply({
+        content: '❌ 曲名またはYouTubeのURLを指定してください。',
+        ephemeral: true,
+      });
+    }
+
+    // ここで初めて deferReply を呼ぶ
     await interaction.deferReply();
 
-    const query = interaction.options.getString('query');
-
-if (!query) {
-  return interaction.reply({
-    content: '❌ 曲名またはYouTubeのURLを指定してください。',
-    ephemeral: true,
-  });
-}
     const validType = play.yt_validate(query);
-
     await joinChannel(voiceChannel, interaction.channel);
 
-    // YouTubeプレイリストURLの場合はまとめて取り込む
     if (validType === 'playlist') {
       let tracks;
       try {
@@ -82,4 +81,3 @@ if (!query) {
     return interaction.editReply({ embeds: [embed] });
   },
 };
-
