@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, ActivityType } = require('discord.js');
 const { AudioPlayerStatus } = require('@discordjs/voice');
 const { initDB } = require('./database');
 const {
@@ -36,6 +36,42 @@ for (const file of commandFiles) {
 
 client.once('ready', () => {
   console.log(`✅ ログイン完了: ${client.user.tag}`);
+
+  // --- ここからステータスループのコード ---
+  let statusIndex = 0;
+
+  // 5秒（5000ミリ秒）ごとに切り替え
+  setInterval(() => {
+    if (statusIndex === 0) {
+      // ステータス1: カスタムステータス
+      client.user.setActivity({
+        name: 'custom',
+        type: ActivityType.Custom,
+        state: 'developed by @vug2'
+      });
+    } else {
+      // ステータス2
+      const guildCount = client.guilds.cache.size;
+
+      let listenerCount = 0;
+      client.guilds.cache.forEach(guild => {
+        const botVoiceChannel = guild.members.me?.voice?.channel;
+        if (botVoiceChannel) {
+          listenerCount += Math.max(0, botVoiceChannel.members.size - 1);
+        }
+      });
+
+      // こちらもカスタムステータスに設定
+      client.user.setActivity({
+        name: 'custom',
+        type: ActivityType.Custom,
+        state: `${guildCount}サーバー｜${listenerCount}人と音楽を再生中`
+      });
+    }
+
+    statusIndex = (statusIndex + 1) % 2;
+  }, 5000);
+  // --- 追加ここまで ---
 });
 
 client.on('interactionCreate', async (interaction) => {
