@@ -61,14 +61,21 @@ module.exports = {
       url = info.video_details.url;
     } else {
       const results = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
-      if (!results || results.length === 0) {
+      if (!results || results.length === 0 || !results[0].url) {
         return interaction.editReply('❌ 曲が見つかりませんでした。');
       }
       title = results[0].title;
-      url = results[0].url;
+      url = results[0].url; // ← 確実にURLを取得
     }
 
-    await enqueue(interaction.guildId, { title, url, requestedBy: interaction.user.id });
+    // デバッグ用ログ＆URLの空チェック
+    console.log(`[追加] タイトル: ${title}, URL: ${url}`);
+    if (!url) {
+      return interaction.editReply('❌ 曲のURLの取得に失敗しました。');
+    }
+
+    await enqueue(interaction.guildId, { title, url, requestedBy: interaction.user.tag });
+
 
     const m = getManager(interaction.guildId);
     const isNowPlaying = m.current && m.current.url === url && m.current.isAutoplay !== true;
