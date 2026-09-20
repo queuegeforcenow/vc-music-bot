@@ -173,7 +173,7 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   // stream の宣言は1回のみにする
-  const stream = await play.stream(track.url);
+const stream = await play.stream(track.url, { discordPlayerCompatibility: true });
   const resource = createAudioResource(stream.stream, {
     inputType: stream.type,
     inlineVolume: true,
