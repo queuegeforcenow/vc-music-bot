@@ -241,9 +241,32 @@ async function handleTrackEnd(guildId) {
 // 自動BGMモードに応じて再生対象を決定する
 async function buildAutoplayTrack(settings) {
   try {
-    if (settings.mode === 'custom' && settings.custom_link) {
-      return { title: 'カスタム自動BGM', url: settings.custom_link, isAutoplay: true };
+    // custom モードで custom_link が設定されている場合のみ返す
+    if (settings.mode === 'custom') {
+      if (settings.custom_link) {
+        return { title: 'カスタム自動BGM', url: settings.custom_link, isAutoplay: true };
+      }
+      // custom_link が無い場合はおすすめ(recommend)検索にフォールバック
+      settings.mode = 'recommend';
     }
+
+    let query;
+    if (settings.mode === 'genre' && settings.genre && GENRE_KEYWORDS[settings.genre]) {
+      query = GENRE_KEYWORDS[settings.genre];
+    } else {
+      query = RECOMMEND_QUERIES[Math.floor(Math.random() * RECOMMEND_QUERIES.length)];
+    }
+
+    const results = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
+    if (!results || results.length === 0 || !results[0].url) return null;
+
+    const top = results[0];
+    return { title: top.title, url: top.url, isAutoplay: true };
+  } catch (err) {
+    console.error('[Autoplay検索エラー]', err);
+    return null;
+  }
+}
 
     let query;
     if (settings.mode === 'genre' && settings.genre && GENRE_KEYWORDS[settings.genre]) {
