@@ -161,17 +161,8 @@ function getCurrentAndQueueSnapshot(guildId) {
 async function playTrackFromUrl(guildId, track, volumePercent) {
   const m = ensureManager(guildId);
 
-  // デバッグ用ログ（ここで本当にURLが入っているかRenderのログで確認できます）
+  // デバッグ用ログ
   console.log(`[playTrackFromUrl] 渡されたトラック:`, track);
-
-  if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
-    console.error(`[再生スキップ] 無効なURLが検出されたため再生を中止しました:`, track);
-    m.current = null;
-    await sendOrUpdateNowPlaying(guildId);
-    return;
-  }
-
-  const stream = await play.stream(track.url);
 
   // ▼ 強力なURLチェック（ここで無効なデータを完全に弾く） ▼
   if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
@@ -181,6 +172,7 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
     return;
   }
 
+  // stream の宣言は1回のみにする
   const stream = await play.stream(track.url);
   const resource = createAudioResource(stream.stream, {
     inputType: stream.type,
