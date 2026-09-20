@@ -288,7 +288,7 @@ async function buildAutoplayTrack(settings) {
 
 // ==================== 再生コントロール ====================
 
-function pause(guildId) {
+async function pause(guildId) {
   const m = getManager(guildId);
   if (!m || !m.current) return false;
   return m.player.pause();
