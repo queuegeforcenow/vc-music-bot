@@ -191,11 +191,13 @@ function getCurrentAndQueueSnapshot(guildId) {
       }
 
       // ytdl-core に agent オプションを渡してストリームを取得
-      const ytdlStream = ytdl(track.url, {
-        filter: 'audioonly',
-        highWaterMark: 1 << 25,
-        agent: agent, // ← ここでCookieを適用
-      });
+// ytdl-core に agent と playerClients オプションを渡してストリームを取得
+    const ytdlStream = ytdl(track.url, {
+      filter: 'audioonly',
+      highWaterMark: 1 << 25,
+      agent: agent,
+      playerClients: ['WEB', 'ANDROID', 'IOS'], // ← この行を追加！
+    });
       // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
       // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
