@@ -161,8 +161,9 @@ function getCurrentAndQueueSnapshot(guildId) {
 async function playTrackFromUrl(guildId, track, volumePercent) {
   const m = ensureManager(guildId);
 
-  if (!track || !track.url) {
-    console.error(`[再生エラー] guild=${guildId}: 再生対象のURLが指定されていません。`);
+  // ▼ 強力なURLチェック（ここで無効なデータを完全に弾く） ▼
+  if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
+    console.error(`[再生スキップ] 無効なURLが検出されたため再生を中止しました:`, track);
     m.current = null;
     await sendOrUpdateNowPlaying(guildId);
     return;
