@@ -7,7 +7,7 @@ module.exports = {
     .setName('music')
     .setDescription('曲を検索してキューに追加し、再生します（YouTubeプレイリストURLも対応）')
     .addStringOption((opt) =>
-      opt.setName('query').setDescription('曲名、YouTubeのURL、またはプレイリストURL').setRequired(true)
+      opt.setName('link').setDescription('曲名、YouTubeのURL、またはプレイリストURL').setRequired(true)
     ),
 
   async execute(interaction) {
@@ -19,8 +19,8 @@ module.exports = {
       });
     }
 
-    const query = interaction.options.getString('query');
-    if (!query) {
+    const link = interaction.options.getString('link');
+    if (!link) {
       return interaction.reply({
         content: '❌ 曲名またはYouTubeのURLを指定してください。',
         ephemeral: true,
@@ -30,13 +30,13 @@ module.exports = {
     // ここで初めて deferReply を呼ぶ
     await interaction.deferReply();
 
-    const validType = play.yt_validate(query);
+    const validType = play.yt_validate(link);
     await joinChannel(voiceChannel, interaction.channel);
 
     if (validType === 'playlist') {
       let tracks;
       try {
-        tracks = await resolveYoutubePlaylist(query);
+        tracks = await resolveYoutubePlaylist(link);
       } catch (err) {
         console.error('[プレイリスト取得エラー]', err);
         return interaction.editReply('❌ プレイリストの取得に失敗しました。URLを確認してください。');
@@ -56,11 +56,11 @@ module.exports = {
 
     let title, url;
     if (validType === 'video') {
-      const info = await play.video_basic_info(query);
+      const info = await play.video_basic_info(link);
       title = info.video_details.title;
       url = info.video_details.url;
     } else {
-      const results = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
+      const results = await play.search(link, { source: { youtube: 'video' }, limit: 1 });
       if (!results || results.length === 0 || !results[0].url) {
         return interaction.editReply('❌ 曲が見つかりませんでした。');
       }
