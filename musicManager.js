@@ -222,17 +222,17 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
     }
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-    // yt-dlp (youtube-dl-exec) に cookies オプションを渡して直リンクを取得
+// yt-dlp (youtube-dl-exec) に cookies オプションを渡して直リンクを取得
     const streamUrl = String(
       await youtubedl(track.url, {
         getUrl: true,
-        f: 'bestaudio',
+        f: 'bestaudio/best', // ← 'bestaudio' から 'bestaudio/best' に変更
         noWarnings: true,
         noPlaylist: true,
         cookies: fs.existsSync(cookiePath) ? cookiePath : undefined,
       })
     ).trim();
-
+    
     if (!streamUrl) {
       throw new Error('音声の直リンクの取得に失敗しました');
     }
