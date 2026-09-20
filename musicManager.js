@@ -162,67 +162,81 @@ function getCurrentAndQueueSnapshot(guildId) {
 }
 
 // 実際に音声リソースを作って再生する
-async function playTrackFromUrl(guildId, track, volumePercent) {
-  const m = ensureManager(guildId);
+  async function playTrackFromUrl(guildId, track, volumePercent) {
+    const m = ensureManager(guildId);
 
-  // デバッグ用ログ
-  console.log(`[playTrackFromUrl] 渡されたトラック:`, track);
+    console.log(`[playTrackFromUrl] 渡されたトラック:`, track);
 
-  // 無効なURLのガード
-  if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
-    console.error(`[再生スキップ] 無効なURLが検出されたため再生を中止しました:`, track);
-    m.current = null;
-    await sendOrUpdateNowPlaying(guildId);
-    return;
+    if (!track || !track.url || track.url === 'undefined' || typeof track.url !== 'string') {
+      console.error(`[再生スキップ] 無効なURLが検出されたため再生を中止しました:`, track);
+      m.current = null;
+      await sendOrUpdateNowPlaying(guildId);
+      return;
+    }
+
+    try {
+      // ▼▼▼ Cookieエージェントの作成（ボット検知・ログイン要求回避） ▼▼▼
+      let agent = undefined;
+      const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
+      if (cookieValue) {
+        try {
+          // JSON形式の場合
+          agent = ytdl.createAgent(JSON.parse(cookieValue));
+        } catch (e) {
+          // 文字列（Cookieヘッダー形式）の場合
+          try {
+            agent = ytdl.createAgent([{ name: 'cookie', value: cookieValue }]);
+          } catch (err) {}
+        }
+      }
+
+      // ytdl-core に agent オプションを渡してストリームを取得
+      const ytdlStream = ytdl(track.url, {
+        filter: 'audioonly',
+        highWaterMark: 1 << 25,
+        agent: agent, // ← ここでCookieを適用
+      });
+      // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+      // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
+      const transcoder = spawn(ffmpeg, [
+        '-i', 'pipe:0',
+        '-analyzeduration', '0',
+        '-loglevel', '0',
+        '-f', 's16le',
+        '-ar', '48000',
+        '-ac', '2',
+        'pipe:1',
+      ], { stdio: ['pipe', 'pipe', 'ignore'] });
+
+      ytdlStream.pipe(transcoder.stdin);
+
+      const resource = createAudioResource(transcoder.stdout, {
+        inputType: StreamType.Raw,
+        inlineVolume: true,
+      });
+
+      const vol = Math.max(0, Math.min(100, volumePercent));
+      resource.volume.setVolume(vol / 100);
+      m.resource = resource;
+      m.liveVolume = vol;
+      m.current = track;
+      m.player.play(resource);
+      await sendOrUpdateNowPlaying(guildId);
+
+      addHistory(guildId, {
+        title: track.title,
+        url: track.url,
+        requestedBy: track.requestedBy ?? null,
+        isAutoplay: !!track.isAutoplay,
+      }).catch((err) => console.error('[履歴記録エラー]', err));
+
+    } catch (err) {
+      console.error('[再生エラー]', err);
+      m.current = null;
+      await sendOrUpdateNowPlaying(guildId);
+    }
   }
-
-  try {
-    // ytdl-core で音声ストリームを取得
-    const ytdlStream = ytdl(track.url, {
-      filter: 'audioonly',
-      highWaterMark: 1 << 25,
-    });
-
-    // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
-    const transcoder = spawn(ffmpeg, [
-      '-i', 'pipe:0',
-      '-analyzeduration', '0',
-      '-loglevel', '0',
-      '-f', 's16le',
-      '-ar', '48000',
-      '-ac', '2',
-      'pipe:1',
-    ], { stdio: ['pipe', 'pipe', 'ignore'] });
-
-    ytdlStream.pipe(transcoder.stdin);
-
-    const resource = createAudioResource(transcoder.stdout, {
-      inputType: StreamType.Raw,
-      inlineVolume: true,
-    });
-
-    const vol = Math.max(0, Math.min(100, volumePercent));
-    resource.volume.setVolume(vol / 100);
-    m.resource = resource;
-    m.liveVolume = vol;
-    m.current = track;
-    m.player.play(resource);
-    await sendOrUpdateNowPlaying(guildId);
-
-    addHistory(guildId, {
-      title: track.title,
-      url: track.url,
-      requestedBy: track.requestedBy ?? null,
-      isAutoplay: !!track.isAutoplay,
-    }).catch((err) => console.error('[履歴記録エラー]', err));
-
-  } catch (err) {
-    console.error('[再生エラー]', err);
-    m.current = null;
-    await sendOrUpdateNowPlaying(guildId);
-  }
-}
-
 // キューの次の曲を再生
 async function playNext(guildId) {
   const m = getManager(guildId);
