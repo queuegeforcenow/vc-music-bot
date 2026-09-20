@@ -161,6 +161,29 @@ function getCurrentAndQueueSnapshot(guildId) {
   return list;
 }
 
+// Cookie文字列を ytdl-core 用の配列に変換するヘルパー関数
+function parseCookies(cookieStr) {
+  if (!cookieStr) return [];
+  try {
+    const parsed = JSON.parse(cookieStr);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {}
+
+  // "key1=val1; key2=val2" 形式の文字列をパース
+  return cookieStr.split(';').map(cookie => {
+    const parts = cookie.trim().split('=');
+    if (parts.length >= 2) {
+      return {
+        name: parts[0].trim(),
+        value: parts.slice(1).join('=').trim(),
+        domain: '.youtube.com',
+        path: '/'
+      };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
 // 実際に音声リソースを作って再生する
 async function playTrackFromUrl(guildId, track, volumePercent) {
   const m = ensureManager(guildId);
@@ -175,11 +198,27 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // play-dl の代わりに @distube/ytdl-core を使用してストリームを取得
+    // 確実にCookieエージェントを作成してボット検知を回避
+    let agent = undefined;
+    const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
+    if (cookieValue) {
+      try {
+        const cookies = parseCookies(cookieValue);
+        if (cookies.length > 0) {
+          agent = ytdl.createAgent(cookies);
+          console.log('[ytdl] Cookieエージェントの作成に成功しました');
+        }
+      } catch (err) {
+        console.error('[ytdl] Cookieエージェントの作成に失敗しました:', err);
+      }
+    }
+
+    // ytdl-core に agent と playerClients を渡してストリームを取得
     const ytdlStream = ytdl(track.url, {
       filter: 'audioonly',
       highWaterMark: 1 << 25,
-      playerClients: ['ios', 'android', 'web'], // YouTubeのブロックを回避
+      agent: agent,
+      playerClients: ['WEB', 'ANDROID', 'IOS'],
     });
 
     // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
