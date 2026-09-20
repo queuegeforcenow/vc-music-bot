@@ -5,6 +5,7 @@ const http = require('http');
 const { Client, GatewayIntentBits, Collection, ActivityType } = require('discord.js');
 const { AudioPlayerStatus } = require('@discordjs/voice');
 const { initDB } = require('./database');
+const play = require('play-dl');
 const {
   getManager,
   pause,
@@ -178,6 +179,19 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 async function main() {
   await initDB();
+  if (process.env.YOUTUBE_COOKIE) {
+    try {
+      await play.setToken({
+        youtube: {
+          cookie: process.env.YOUTUBE_COOKIE
+        }
+      });
+      console.log('🍪 YouTubeのCookieを設定しました（ブロック回避有効）');
+    } catch (err) {
+      console.error('❌ Cookieの設定に失敗しました:', err);
+    }
+  }
+  
   await client.login(process.env.DISCORD_TOKEN);
 }
 
