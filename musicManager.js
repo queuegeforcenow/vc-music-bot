@@ -175,10 +175,14 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // ▼▼▼ play-dl で音声ストリームを取得し、ffmpeg で安定デコードする ▼▼▼
-    const streamInfo = await play.stream(track.url);
-    const sourceStream = streamInfo.stream;
+    // play-dl の代わりに @distube/ytdl-core を使用してストリームを取得
+    const ytdlStream = ytdl(track.url, {
+      filter: 'audioonly',
+      highWaterMark: 1 << 25,
+      playerClients: ['ios', 'android', 'web'], // YouTubeのブロックを回避
+    });
 
+    // ffmpeg-static を使って Discord 用の PCM ストリームに変換する
     const transcoder = spawn(ffmpeg, [
       '-i', 'pipe:0',
       '-analyzeduration', '0',
@@ -189,13 +193,12 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
       'pipe:1',
     ], { stdio: ['pipe', 'pipe', 'ignore'] });
 
-    sourceStream.pipe(transcoder.stdin);
+    ytdlStream.pipe(transcoder.stdin);
 
     const resource = createAudioResource(transcoder.stdout, {
       inputType: StreamType.Raw,
       inlineVolume: true,
     });
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     const vol = Math.max(0, Math.min(100, volumePercent));
     resource.volume.setVolume(vol / 100);
