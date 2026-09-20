@@ -201,12 +201,26 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }
 
   try {
-    // 環境変数のCookieを一時ファイルに書き出す
+    // ▼▼▼ 環境変数のCookieを yt-dlp 用の Netscape 形式に変換して書き出す ▼▼▼
     const cookiePath = path.join(__dirname, 'cookies.txt');
     const cookieValue = process.env.YOUTUBE_COOKIE || process.env.COOKIE;
+    
     if (cookieValue) {
-      fs.writeFileSync(cookiePath, cookieValue);
+      let netscapeLines = ['# Netscape HTTP Cookie File'];
+      const cookies = cookieValue.split(';');
+      for (const c of cookies) {
+        const parts = c.trim().split('=');
+        if (parts.length >= 2) {
+          const name = parts[0].trim();
+          const value = parts.slice(1).join('=').trim();
+          if (name && value) {
+            netscapeLines.push(`.youtube.com\tTRUE\t/\tTRUE\t2147483647\t${name}\t${value}`);
+          }
+        }
+      }
+      fs.writeFileSync(cookiePath, netscapeLines.join('\n'));
     }
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     // yt-dlp (youtube-dl-exec) に cookies オプションを渡して直リンクを取得
     const streamUrl = String(
