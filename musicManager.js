@@ -11,14 +11,16 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const play = require('play-dl');
 const { getSettings, addHistory } = require('./database');
 
-// ジャンルごとの検索キーワード（レポート仕様どおり）
+// ジャンルごとの検索キーワード
 const GENRE_KEYWORDS = {
   chill: 'チルBGM 作業用',
   battle: '戦闘BGM 作業用',
   focus: '集中用BGM 作業用',
   sleep: '睡眠用BGM 雨音',
+  sleep_rain: '睡眠用BGM 雨音',
   ambient: '環境音 BGM 作業用',
   uptempo: 'テンションが上がるBGM 作業用',
+  upbeat: 'テンションが上がるBGM 作業用',
 };
 
 // おすすめモードの検索候補
@@ -116,7 +118,7 @@ function leaveChannel(guildId) {
   return true;
 }
 
-// 通常の曲をキューに追加する（/music で使用）
+// 通常の曲をキューに追加する
 async function enqueue(guildId, { title, url, requestedBy }) {
   const m = ensureManager(guildId);
   m.queue.push({ title, url, requestedBy, isAutoplay: false });
@@ -126,7 +128,7 @@ async function enqueue(guildId, { title, url, requestedBy }) {
   return m.queue.length;
 }
 
-// 複数曲をまとめてキューに追加する（YouTubeプレイリスト取り込み・保存済みプレイリスト再生用）
+// 複数曲をまとめてキューに追加する
 async function enqueueMany(guildId, tracks, requestedBy) {
   const m = ensureManager(guildId);
   for (const t of tracks) {
@@ -138,14 +140,14 @@ async function enqueueMany(guildId, tracks, requestedBy) {
   return m.queue.length;
 }
 
-// YouTubeプレイリストURLから曲一覧を取得する（{title, url}の配列）
+// YouTubeプレイリストURLから曲一覧を取得する
 async function resolveYoutubePlaylist(url, limit = 50) {
   const pl = await play.playlist_info(url, { incomplete: true });
   const videos = await pl.all_videos();
   return videos.slice(0, limit).map((v) => ({ title: v.title, url: v.url }));
 }
 
-// 現在再生中の曲＋キューの中身をスナップショットとして取得する（プレイリスト保存用）
+// 現在再生中の曲＋キューの中身をスナップショットとして取得する
 function getCurrentAndQueueSnapshot(guildId) {
   const m = getManager(guildId);
   if (!m) return [];
@@ -159,7 +161,6 @@ function getCurrentAndQueueSnapshot(guildId) {
 async function playTrackFromUrl(guildId, track, volumePercent) {
   const m = ensureManager(guildId);
 
-  // URLが存在しない（undefined）場合は処理を安全に中断
   if (!track || !track.url) {
     console.error(`[再生エラー] guild=${guildId}: 再生対象のURLが指定されていません。`);
     m.current = null;
@@ -180,7 +181,6 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   m.player.play(resource);
   await sendOrUpdateNowPlaying(guildId);
 
-  // 再生履歴に記録（失敗しても再生自体は継続させる）
   addHistory(guildId, {
     title: track.title,
     url: track.url,
@@ -189,19 +189,17 @@ async function playTrackFromUrl(guildId, track, volumePercent) {
   }).catch((err) => console.error('[履歴記録エラー]', err));
 }
 
-// キューの次の曲を再生。無ければ自動BGM条件を判定する
+// キューの次の曲を再生
 async function playNext(guildId) {
   const m = getManager(guildId);
   if (!m) return;
 
-  // ループ: 1曲リピートなら同じ曲をもう一度
   if (m.loop === 'track' && m.current) {
     const settings = await getSettings(guildId);
     await playTrackFromUrl(guildId, m.current, m.liveVolume ?? settings.volume);
     return;
   }
 
-  // ループ: キューリピートなら再生し終えた曲を末尾に戻す
   if (m.loop === 'queue' && m.current && !m.current.isAutoplay) {
     m.queue.push(m.current);
   }
@@ -213,7 +211,6 @@ async function playNext(guildId) {
     return;
   }
 
-  // 通常曲が無い → 自動BGM条件を確認
   const settings = await getSettings(guildId);
   if (!settings.auto_bgm || settings.mode === 'off') {
     m.current = null;
@@ -230,23 +227,19 @@ async function playNext(guildId) {
   await playTrackFromUrl(guildId, autoTrack, settings.volume);
 }
 
-// 曲が終わった時のハンドラ（3条件がすべて揃えば自動BGM継続）
 async function handleTrackEnd(guildId) {
   const m = getManager(guildId);
   if (!m) return;
-  // m.current はループ判定（1曲/キューリピート）に使うため playNext 側でクリアする
   await playNext(guildId);
 }
 
 // 自動BGMモードに応じて再生対象を決定する
 async function buildAutoplayTrack(settings) {
   try {
-    // custom モードで custom_link が設定されている場合のみ返す
     if (settings.mode === 'custom') {
       if (settings.custom_link) {
         return { title: 'カスタム自動BGM', url: settings.custom_link, isAutoplay: true };
       }
-      // custom_link が無い場合はおすすめ(recommend)検索にフォールバック
       settings.mode = 'recommend';
     }
 
@@ -268,27 +261,9 @@ async function buildAutoplayTrack(settings) {
   }
 }
 
-    let query;
-    if (settings.mode === 'genre' && settings.genre && GENRE_KEYWORDS[settings.genre]) {
-      query = GENRE_KEYWORDS[settings.genre];
-    } else {
-      query = RECOMMEND_QUERIES[Math.floor(Math.random() * RECOMMEND_QUERIES.length)];
-    }
-
-    const results = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
-    if (!results || results.length === 0) return null;
-
-    const top = results[0];
-    return { title: top.title, url: top.url, isAutoplay: true };
-  } catch (err) {
-    console.error('[Autoplay検索エラー]', err);
-    return null;
-  }
-}
-
 // ==================== 再生コントロール ====================
 
-async function pause(guildId) {
+function pause(guildId) {
   const m = getManager(guildId);
   if (!m || !m.current) return false;
   return m.player.pause();
@@ -300,15 +275,20 @@ function resume(guildId) {
   return m.player.unpause();
 }
 
-async function skip(guildId) {
+async function skip(guildId, count = 1) {
   const m = getManager(guildId);
   if (!m || !m.current) return false;
-  // 1曲リピート中にスキップした場合はループを崩さないよう一旦OFF扱いで次へ
+
   const wasTrackLoop = m.loop === 'track';
   if (wasTrackLoop) m.loop = 'off';
-  m.player.stop(true); // Idleイベント経由でplayNextが呼ばれる
+
+  if (count > 1 && m.queue.length > 0) {
+    m.queue.splice(0, count - 1);
+  }
+
+  m.player.stop(true);
+
   if (wasTrackLoop) {
-    // 次のIdle処理が終わった後にループ設定を戻す
     setTimeout(() => { if (m) m.loop = 'track'; }, 500);
   }
   return true;
@@ -378,7 +358,6 @@ function shuffleQueue(guildId) {
   return true;
 }
 
-// 1-based position で指定して削除
 function removeFromQueue(guildId, position) {
   const m = getManager(guildId);
   if (!m) return null;
@@ -388,7 +367,6 @@ function removeFromQueue(guildId, position) {
   return removed;
 }
 
-// 1-based position 同士を入れ替え/移動
 function moveInQueue(guildId, from, to) {
   const m = getManager(guildId);
   if (!m) return false;
@@ -473,7 +451,6 @@ function buildNowPlayingEmbed(guildId) {
   return embed;
 }
 
-// Now Playingメッセージを新規送信 or 既存メッセージを編集
 async function sendOrUpdateNowPlaying(guildId) {
   const m = getManager(guildId);
   if (!m || !m.textChannel) return;
@@ -488,7 +465,6 @@ async function sendOrUpdateNowPlaying(guildId) {
       m.nowPlayingMessage = await m.textChannel.send({ embeds: [embed], components });
     }
   } catch (err) {
-    // メッセージが削除された等の場合は新規送信し直す
     try {
       m.nowPlayingMessage = await m.textChannel.send({ embeds: [embed], components });
     } catch (e) {
@@ -507,11 +483,15 @@ function clearEmptyTimer(guildId) {
   }
 }
 
-// Bot以外のメンバーが0人になったら一定時間後に自動退出、誰か入ったらキャンセル
-function scheduleEmptyLeaveCheck(guildId, voiceChannel) {
+async function scheduleEmptyLeaveCheck(guildId, voiceChannel) {
   const m = getManager(guildId);
   if (!m) return;
   clearEmptyTimer(guildId);
+
+  const settings = await getSettings(guildId);
+  if (settings.twenty_four_seven) {
+    return;
+  }
 
   const humanCount = voiceChannel.members.filter((mem) => !mem.user.bot).size;
   if (humanCount === 0) {
@@ -534,7 +514,6 @@ module.exports = {
   GENRE_KEYWORDS,
   RECOMMEND_QUERIES,
   LOOP_LABELS,
-  // 再生コントロール
   pause,
   resume,
   skip,
@@ -543,17 +522,14 @@ module.exports = {
   adjustLiveVolume,
   setLoop,
   cycleLoop,
-  // キュー管理
   getQueue,
   clearQueue,
   shuffleQueue,
   removeFromQueue,
   moveInQueue,
-  // Now Playing UI
   buildNowPlayingEmbed,
   buildNowPlayingComponents,
   sendOrUpdateNowPlaying,
-  // 無人化検知
   scheduleEmptyLeaveCheck,
   clearEmptyTimer,
 };
